@@ -1,16 +1,66 @@
 # formsclient
+THIS IS AN EXPERIMENTAL PROJECT TO EXAMINE THE EFFECTIVENESS OF PAIR-PROGRAMMING. **NOT FOR A PRACTICAL USE.**
 
-A new Flutter project.
+This is an client software for Forms-like system written in Flutter 3.
 
-## Getting Started
+## Features
+Fetches a form from a server, shows it, a user fills it, and submit it to the server. That's it.
 
-This project is a starting point for a Flutter application.
+## Specs
+Uses the following JSONs to communicate with a server.
 
-A few resources to get you started if this is your first Flutter project:
+Form to fetch:
+```
+(返事) := 
+{
+  result: "ok"
+  id: (フォームID)
+  form: (フォーム)
+}
+(フォーム) :=
+{
+  title: (タイトル),
+  questions: [
+    (質問項目)*
+  ]
+}
+(質問項目) := (テキストボックス) | (チェックボックス)
+(テキストボックス) :=
+{
+  id: (質問ID),
+  type: "text",
+  explanation: (質問文),
+  selection: []
+}
+(チェックボックス) :=
+{
+  id: (質問ID),
+  type: "radio",
+  explanation: (質問文),
+  selection: [
+    {
+      label: (ラベル),
+      value: (値),
+    }
+  ],
+}
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Answer to submit:
+```
+(回答) :=
+{
+  id: (フォームID),
+  answers: [
+    {
+      id: (質問ID),
+      type: (タイプ),
+      value: (値),
+    }*
+  ]
+}
+(回答一覧) :=
+[
+  (回答)*
+]
+```
