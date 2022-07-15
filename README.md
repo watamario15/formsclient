@@ -1,66 +1,74 @@
 # formsclient
-THIS IS AN EXPERIMENTAL PROJECT TO EXAMINE THE EFFECTIVENESS OF PAIR-PROGRAMMING. **NOT FOR A PRACTICAL USE.**
+The purpose of this project is to evaluate the pair-programming. **NOT FOR A PRACTICAL USE.**
 
-This is an client software for Forms-like system written in Flutter 3.
+This is client software for a forms-like system written in [Flutter 3](https://flutter.dev/).
 
 ## Features
-Fetches a form from a server, shows it, a user fills it, and submit it to the server. That's it.
+Fetches a form from a server, displays it, users fill it, and users submit it to the server. That's it.
 
 ## Specs
 Uses the following JSONs to communicate with a server.
 
-Form to fetch:
+A form to fetch:
 ```
-(返事) := 
+(Response) := 
 {
-  result: "ok"
-  id: (フォームID)
-  form: (フォーム)
+  result: "ok",
+  id: (Form ID),
+  form: (Form)
 }
-(フォーム) :=
+
+(Form) :=
 {
-  title: (タイトル),
+  title: (Title),
   questions: [
-    (質問項目)*
+    (Question)*
   ]
 }
-(質問項目) := (テキストボックス) | (チェックボックス)
-(テキストボックス) :=
+
+(Question) := (Textbox) | (Checkbox)
+
+(Textbox) :=
 {
-  id: (質問ID),
+  id: (Question ID),
   type: "text",
-  explanation: (質問文),
+  explanation: (Question statement),
   selection: []
 }
-(チェックボックス) :=
+
+(Checkbox) :=
 {
-  id: (質問ID),
+  id: (Question ID),
   type: "radio",
-  explanation: (質問文),
+  explanation: (Question statement),
   selection: [
     {
-      label: (ラベル),
-      value: (値),
+      label: (Option index),
+      value: (Option statement),
     }
   ],
 }
 ```
 
-Answer to submit:
+An answer to submit:
 ```
-(回答) :=
+(Answer) :=
 {
-  id: (フォームID),
+  id: (Form ID),
   answers: [
     {
-      id: (質問ID),
-      type: (タイプ),
-      value: (値),
+      id: (Question ID),
+      type: (Class),
+      value: (Value),
     }*
   ]
 }
-(回答一覧) :=
+```
+
+Collected answers to receive from a server (not implemented)
+```
+(Answers) :=
 [
-  (回答)*
+  (Answer)*
 ]
 ```

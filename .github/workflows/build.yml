@@ -49,12 +49,12 @@ jobs:
           tag_name: ${{ steps.release_name.outputs.name }}
           release_name: ${{ steps.release_name.outputs.name }}
           body: |-
-            THIS IS AN EXPERIMENTAL PROJECT TO EXAMINE THE EFFECTIVENESS OF PAIR-PROGRAMMING. **NOT FOR A PRACTICAL USE.**
+            The purpose of this project is to evaluate the pair-programming. **NOT FOR A PRACTICAL USE.**
             - The Windows release requires the [64-bit Visual C++ redistributable for Visual Studio 2022](https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads) to be installed.
             - The Linux release may require some additional dependencies. `ldd` command will teach you what are needed.
             - For Android devices, download the .apk file and install it with "Allow installation of apps from unknown sources on Android" enabled.
             - For web, visit the [deployment](https://watamario15.github.io/formsclient/) or the [`gh-pages` branch](https://github.com/watamario15/formsclient/tree/gh-pages).
-            - The macOS and iOS release are experimental and not notarized. We even don't know whether they work or not.
+            - The macOS and the iOS release are experimental and not notarized. We don't even know whether they work or not.
           prerelease: true
 
   windows:
@@ -233,7 +233,7 @@ jobs:
         run: flutter pub get
 
       - name: Flutter Build
-        run: flutter build ios --release --no-codesign
+        run: flutter build ios --no-codesign
       
       - name: Setup Releases
         run: |
