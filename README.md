@@ -1,16 +1,74 @@
 # formsclient
+The purpose of this project is to evaluate the pair-programming. **NOT FOR A PRACTICAL USE.**
 
-A new Flutter project.
+This is client software for a forms-like system written in [Flutter 3](https://flutter.dev/).
 
-## Getting Started
+## Features
+Fetches a form from a server, displays it, users fill it, and users submit it to the server. That's it.
 
-This project is a starting point for a Flutter application.
+## Specs
+Uses the following JSONs to communicate with a server.
 
-A few resources to get you started if this is your first Flutter project:
+A form to fetch:
+```
+(Response) := 
+{
+  result: "ok",
+  id: (Form ID),
+  form: (Form)
+}
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+(Form) :=
+{
+  title: (Title),
+  questions: [
+    (Question)*
+  ]
+}
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+(Question) := (Textbox) | (Checkbox)
+
+(Textbox) :=
+{
+  id: (Question ID),
+  type: "text",
+  explanation: (Question statement),
+  selection: []
+}
+
+(Checkbox) :=
+{
+  id: (Question ID),
+  type: "radio",
+  explanation: (Question statement),
+  selection: [
+    {
+      label: (Option index),
+      value: (Option statement),
+    }
+  ],
+}
+```
+
+An answer to submit:
+```
+(Answer) :=
+{
+  id: (Form ID),
+  answers: [
+    {
+      id: (Question ID),
+      type: (Class),
+      value: (Value),
+    }*
+  ]
+}
+```
+
+Collected answers to receive from a server (not implemented)
+```
+(Answers) :=
+[
+  (Answer)*
+]
+```
