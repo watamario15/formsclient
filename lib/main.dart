@@ -1,6 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'dart:async';
 
 class Selection {
   final int label;
@@ -65,6 +66,25 @@ class GetFormModel {
   Map<String, dynamic> toJson() => {'result': result, 'id': id, 'form': form};
 }
 
+class TextAnswer {
+  final int id;
+  final String type;
+  final String value;
+}
+
+class RadioAnswer {
+  final int id;
+  final String type;
+  
+}
+
+class AnswerModel {
+  final String id;
+  final List<Answer> answers;
+}
+
+
+
 class CheckboxFormField extends FormField<Map<int, bool>> {
   CheckboxFormField({
     Key? key,
@@ -110,8 +130,30 @@ class MyForm extends StatefulWidget {
 
 class _MyFormState extends State<MyForm> {
   final _formKey = GlobalKey<FormState>();
+  late Future<GetFormModel> futureForm;
+  Future<GetFormModel> fetchForm(String id) async {
+    final response =
+        await http.get(Uri.parse('http://localhost:8080/get-form/$id'));
+
+    if (response.statusCode == 200) {
+      // If the server did return a 200 OK response,
+      // then parse the JSON.
+      return GetFormModel.fromJson(jsonDecode(response.body));
+    } else {
+      // If the server did not return a 200 OK response,
+      // then throw an exception.
+      throw Exception('Failed to load album');
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    futureForm = fetchForm("0");
+  }
 
   // final _json = JSONForm.fromJson(jsonDecode(jsonString));
+  /*
   final _formResponse = const GetFormModel(
     'ok',
     'someid',
@@ -132,6 +174,7 @@ class _MyFormState extends State<MyForm> {
       ],
     ),
   );
+  */
 
   /// タイトル
   Widget _title(String title) => Container(
@@ -204,11 +247,22 @@ class _MyFormState extends State<MyForm> {
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          children: [
-            _title(_formResponse.form.title),
-            for (var item in _formResponse.form.questions) _formItem(item),
-          ],
+        child: FutureBuilder<GetFormModel>(
+          future: futureForm,
+          builder: (context, snapshot) {
+            if(snapshot.hasData){
+              return ListView(
+                children: [
+                  _title(snapshot.data!.form.title),
+                  for (var item in snapshot.data!.form.questions) _formItem(item),
+                ],
+              );
+            } else if (snapshot.hasError){
+              return Text('${snapshot.error}');
+            }
+
+            return const CircularProgressIndicator();
+          },
         ),
       ),
       floatingActionButton: FloatingActionButton(
