@@ -20,23 +20,23 @@ class Question {
   final int id;
   final String type;
   final String explanation;
-  final List<Selection> selections;
+  final List<Selection>? selections;
 
-  const Question(this.id, this.type, this.explanation, this.selections);
+  const Question(this.id, this.type, this.explanation, [this.selections]);
 
   Question.fromJson(Map<String, dynamic> json)
       : id = json['id']!,
         type = json['type']!,
         explanation = json['explanation']!,
-        selections = [
-          for (var item in json['selection']!) Selection.fromJson(item)
-        ];
+        selections = json.containsKey('selection')
+            ? [for (var item in json['selection']) Selection.fromJson(item)]
+            : null;
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'type': type,
         'explanation': explanation,
-        'selection': selections
+        if (selections != null) 'selection': selections
       };
 }
 
@@ -60,24 +60,33 @@ class MyFormModel {
 
 class GetFormModel {
   final String result;
-  final String id;
-  final MyFormModel form;
+  final String? id;
+  final MyFormModel? form;
+  final String? message;
 
-  const GetFormModel(this.result, this.id, this.form);
+  const GetFormModel(this.result, {this.id, this.form, this.message});
 
   GetFormModel.fromJson(Map<String, dynamic> json)
       : result = json['result']!,
-        id = json['id']!,
-        form = MyFormModel.fromJson(json['form']!);
+        id = json.containsKey('id') ? json['id']! : null,
+        message = json.containsKey('message') ? json['message']! : null,
+        form = json.containsKey('form')
+            ? MyFormModel.fromJson(json['form']!)
+            : null;
 
-  Map<String, dynamic> toJson() => {'result': result, 'id': id, 'form': form};
+  Map<String, dynamic> toJson() => {
+        'result': result,
+        if (id != null) 'id': id,
+        if (message != null) 'message': message,
+        if (form != null) 'form': form
+      };
 }
 
 class Answer {
-  final int id;
-  final String type;
+  int id;
+  String type;
   String? textValue;
-  Map<int, bool>? radioValue;
+  Map<String, bool>? radioValue;
 
   Answer(this.id, this.type, dynamic value) {
     if (type == 'text') {
@@ -127,20 +136,20 @@ class AnswerResponse {
 
   AnswerResponse.fromJson(Map<String, dynamic> json)
       : result = json['result']!,
-        id = json['id'],
+        id = json.containsKey('id') ? json['id'] : null,
         message = json['message']!;
 
   Map<String, dynamic> toJson() =>
       {'result': result, if (id != null) 'id': id, 'message': message};
 }
 
-class CheckboxFormField extends FormField<Map<int, bool>> {
+class CheckboxFormField extends FormField<Map<String, bool>> {
   CheckboxFormField({
     Key? key,
-    FormFieldSetter<Map<int, bool>>? onSaved,
-    FormFieldValidator<Map<int, bool>>? validator,
+    FormFieldSetter<Map<String, bool>>? onSaved,
+    FormFieldValidator<Map<String, bool>>? validator,
     AutovalidateMode autovalidateMode = AutovalidateMode.disabled,
-    Map<int, bool>? initialValue,
+    Map<String, bool>? initialValue,
     required List<Selection> options,
   }) : super(
           key: key,
@@ -155,12 +164,13 @@ class CheckboxFormField extends FormField<Map<int, bool>> {
                 for (var item in options)
                   CheckboxListTile(
                     title: Text(item.value),
-                    value: state.value!.putIfAbsent(item.label, () => false),
+                    value: state.value!
+                        .putIfAbsent(item.label.toString(), () => false),
                     controlAffinity: ListTileControlAffinity.leading,
                     onChanged: (flag) {
                       if (flag == null) return;
                       final newState = state.value!;
-                      newState[item.label] = flag;
+                      newState[item.label.toString()] = flag;
                       state.didChange(newState);
                     },
                   ),
@@ -172,23 +182,26 @@ class CheckboxFormField extends FormField<Map<int, bool>> {
 
 String? hostName, formID;
 
-class MyForm extends StatefulWidget {
-  const MyForm({Key? key}) : super(key: key);
+class AnswerScreen extends StatefulWidget {
+  const AnswerScreen({Key? key}) : super(key: key);
 
   @override
-  State<MyForm> createState() => _MyFormState();
+  State<AnswerScreen> createState() => _AnswerScreenState();
 }
 
-class _MyFormState extends State<MyForm> {
+class _AnswerScreenState extends State<AnswerScreen> {
   final _formKey = GlobalKey<FormState>();
   Future<GetFormModel>? _futureForm;
+  final _answer = AnswerModel(formID!, []);
+  Future<AnswerResponse>? _futureResponse;
 
   /*
   final _formResponse = const GetFormModel(
     'ok',
-    'someid',
-    MyFormModel(
+    id: 'someid',
+    form: MyFormModel(
       'testform',
+      'someid',
       [
         Question(
           0,
@@ -200,7 +213,7 @@ class _MyFormState extends State<MyForm> {
             Selection(2, 'This is third'),
           ],
         ),
-        Question(1, 'text', 'Hey! This is text!', []),
+        Question(1, 'text', 'Hey! This is text!'),
       ],
     ),
   );
@@ -211,9 +224,37 @@ class _MyFormState extends State<MyForm> {
         await http.get(Uri.parse('http://$host:8080/get-form/$id'));
 
     if (response.statusCode == 200) {
-      return GetFormModel.fromJson(jsonDecode(response.body));
+      final form = GetFormModel.fromJson(jsonDecode(response.body));
+      if (form.result != 'ok') {
+        throw Exception('Response is not OK '
+            '(Result: "${form.result}", Message: "${form.message}").');
+      }
+      return form;
     } else {
       throw Exception('Failed to fetch form "$id" from $host.');
+    }
+  }
+
+  Future<AnswerResponse> _sendAnswer(
+    String host,
+    String id,
+    AnswerModel answer,
+  ) async {
+    final response = await http.post(
+      Uri.parse('http://$host:8080/send-answer/$id'),
+      headers: {'Content-Type': 'application/json; charset=UTF-8'},
+      body: jsonEncode(answer),
+    );
+
+    if (response.statusCode == 200) {
+      final ret = AnswerResponse.fromJson(jsonDecode(response.body));
+      if (ret.result != 'ok') {
+        throw Exception('Response is not OK '
+            '(Result: "${ret.result}", Message: "${ret.message}").');
+      }
+      return ret;
+    } else {
+      throw Exception('Failed to send form "$id" to $host.');
     }
   }
 
@@ -228,39 +269,19 @@ class _MyFormState extends State<MyForm> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   title,
-                  style: Theme.of(context).textTheme.headline3,
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.start,
-                children: [
+                children: const [
                   TextButton(
-                    style: ButtonStyle(
-                      foregroundColor: MaterialStateProperty.resolveWith(
-                          (states) => states.contains(MaterialState.disabled)
-                              ? null
-                              : Colors.white),
-                      backgroundColor: MaterialStateProperty.resolveWith(
-                          (states) => states.contains(MaterialState.disabled)
-                              ? null
-                              : Colors.blue),
-                    ),
                     onPressed: null, // 未実装
-                    child: const Text('Modify this form'),
+                    child: Text('Modify this form'),
                   ),
                   TextButton(
-                    style: ButtonStyle(
-                      foregroundColor: MaterialStateProperty.resolveWith(
-                          (states) => states.contains(MaterialState.disabled)
-                              ? null
-                              : Colors.white),
-                      backgroundColor: MaterialStateProperty.resolveWith(
-                          (states) => states.contains(MaterialState.disabled)
-                              ? null
-                              : Colors.blue),
-                    ),
                     onPressed: null, // 未実装
-                    child: const Text('Show answers'),
+                    child: Text('Show answers'),
                   ),
                 ],
               ),
@@ -279,19 +300,37 @@ class _MyFormState extends State<MyForm> {
                 padding: const EdgeInsets.all(8.0),
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  question.explanation,
-                  style: Theme.of(context).textTheme.headline4,
+                  '${question.id}. ${question.explanation}',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
               question.type == 'text'
                   ? TextFormField(
                       keyboardType: TextInputType.multiline,
                       maxLines: null,
-                      onSaved: (content) {},
+                      onSaved: (content) {
+                        for (var item in _answer.answers) {
+                          if (item.id == question.id) {
+                            item.textValue = content;
+                            return;
+                          }
+                        }
+                        _answer.answers
+                            .add(Answer(question.id, question.type, content));
+                      },
                     )
                   : CheckboxFormField(
-                      options: question.selections,
-                      onSaved: (selected) {},
+                      options: question.selections!,
+                      onSaved: (content) {
+                        for (var item in _answer.answers) {
+                          if (item.id == question.id) {
+                            item.radioValue = content;
+                            return;
+                          }
+                        }
+                        _answer.answers
+                            .add(Answer(question.id, question.type, content));
+                      },
                     ),
             ],
           ),
@@ -319,8 +358,8 @@ class _MyFormState extends State<MyForm> {
               key: _formKey,
               child: ListView(
                 children: [
-                  _title(snapshot.data!.form.title),
-                  for (var item in snapshot.data!.form.questions)
+                  _title(snapshot.data!.form!.title),
+                  for (var item in snapshot.data!.form!.questions)
                     _formItem(item),
                 ],
               ),
@@ -349,7 +388,12 @@ class _MyFormState extends State<MyForm> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _formKey.currentState!.save(),
+        onPressed: () {
+          _formKey.currentState!.save();
+          setState(() {
+            _futureResponse = _sendAnswer(hostName!, formID!, _answer);
+          });
+        },
         tooltip: 'Submit',
         child: const Icon(Icons.send),
       ),
@@ -370,6 +414,10 @@ class _HomeState extends State<Home> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        title: const Text('Zemi-A Forms'),
+      ),
       body: Center(
         child: SizedBox(
           width: 400,
@@ -425,16 +473,10 @@ class _HomeState extends State<Home> {
                   ),
                   Padding(
                     padding: const EdgeInsets.all(8.0),
-                    child: TextButton(
-                      style: ButtonStyle(
-                        foregroundColor: MaterialStateProperty.resolveWith(
-                            (states) => states.contains(MaterialState.disabled)
-                                ? null
-                                : Colors.white),
-                        backgroundColor: MaterialStateProperty.resolveWith(
-                            (states) => states.contains(MaterialState.disabled)
-                                ? null
-                                : Colors.blue),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        onPrimary: Theme.of(context).colorScheme.onPrimary,
+                        primary: Theme.of(context).colorScheme.primary,
                       ),
                       onPressed: () {
                         if (_formKey.currentState!.validate()) {
@@ -472,7 +514,7 @@ class MyFormApp extends StatelessWidget {
       ),
       routes: {
         '/': (context) => const Home(),
-        '/answer': (context) => const MyForm(),
+        '/answer': (context) => const AnswerScreen(),
       },
     );
   }
