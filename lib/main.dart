@@ -143,6 +143,12 @@ class AnswerResponse {
       {'result': result, if (id != null) 'id': id, 'message': message};
 }
 
+class FormLocator {
+  final String host, id;
+
+  const FormLocator(this.host, this.id);
+}
+
 class CheckboxFormField extends FormField<Map<String, bool>> {
   CheckboxFormField({
     Key? key,
@@ -180,10 +186,10 @@ class CheckboxFormField extends FormField<Map<String, bool>> {
         );
 }
 
-String? hostName, formID;
-
 class AnswerScreen extends StatefulWidget {
-  const AnswerScreen({Key? key}) : super(key: key);
+  final String hostName, formID;
+  const AnswerScreen({Key? key, required this.hostName, required this.formID})
+      : super(key: key);
 
   @override
   State<AnswerScreen> createState() => _AnswerScreenState();
@@ -192,8 +198,9 @@ class AnswerScreen extends StatefulWidget {
 class _AnswerScreenState extends State<AnswerScreen> {
   final _formKey = GlobalKey<FormState>();
   Future<GetFormModel>? _futureForm;
-  final _answer = AnswerModel(formID!, []);
+  late AnswerModel _answer;
   Future<AnswerResponse>? _futureResponse;
+  bool askOnBack = false;
 
   /*
   final _formResponse = const GetFormModel(
@@ -340,62 +347,99 @@ class _AnswerScreenState extends State<AnswerScreen> {
   @override
   void initState() {
     super.initState();
-    _futureForm = fetchForm(hostName!, formID!);
+    _answer = AnswerModel(widget.formID, []);
+    _futureForm = fetchForm(widget.hostName, widget.formID);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        title: const Text('Zemi-A Forms'),
-      ),
-      body: FutureBuilder<GetFormModel>(
-        future: _futureForm,
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return Form(
-              key: _formKey,
-              child: ListView(
-                children: [
-                  _title(snapshot.data!.form!.title),
-                  for (var item in snapshot.data!.form!.questions)
-                    _formItem(item),
-                ],
-              ),
-            );
-          } else if (snapshot.hasError) {
-            return Center(
-              child: SizedBox(
-                width: 400,
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      'Failed to fetch a form. '
-                      'Please make sure you entered a server and an ID correctly.\n\n'
-                      'Error: ${snapshot.error}',
-                      style: Theme.of(context).textTheme.bodyLarge,
-                      textAlign: TextAlign.center,
+    return WillPopScope(
+      onWillPop: () async =>
+          !askOnBack ||
+          (await showDialog(
+                context: context,
+                builder: (context) => SimpleDialog(
+                  title:
+                      const Text('Your answer will be lost. Go back anyway?'),
+                  children: [
+                    SimpleDialogOption(
+                      child: const Text('Yes'),
+                      onPressed: () {
+                        Navigator.pop(context, true);
+                      },
                     ),
-                  ),
+                    SimpleDialogOption(
+                      child: const Text('No'),
+                      onPressed: () {
+                        Navigator.pop(context, false);
+                      },
+                    )
+                  ],
                 ),
-              ),
-            );
-          }
+              ) ??
+              false),
+      child: Scaffold(
+        appBar: AppBar(
+          centerTitle: true,
+          title: const Text('Zemi-A Forms'),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: FutureBuilder<GetFormModel>(
+              future: _futureForm,
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return SizedBox(
+                    width: 800,
+                    child: Form(
+                      key: _formKey,
+                      onChanged: () => askOnBack = true,
+                      child: ListView(
+                        children: [
+                          _title(snapshot.data!.form!.title),
+                          for (var item in snapshot.data!.form!.questions)
+                            _formItem(item),
+                        ],
+                      ),
+                    ),
+                  );
+                } else if (snapshot.hasError) {
+                  return SizedBox(
+                    width: 800,
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(
+                          '''Failed to fetch a form.
+1. Check if you are connected to the internet and the server is online.
+2. Check the server and ID you entered.
+3. Contact a server maintainer with the following message:
 
-          return const Center(child: CircularProgressIndicator());
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          _formKey.currentState!.save();
-          setState(() {
-            _futureResponse = _sendAnswer(hostName!, formID!, _answer);
-          });
-        },
-        tooltip: 'Submit',
-        child: const Icon(Icons.send),
+${snapshot.error}''',
+                          style: Theme.of(context).textTheme.bodyLarge,
+                          textAlign: TextAlign.left,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return const CircularProgressIndicator();
+              },
+            ),
+          ),
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () {
+            _formKey.currentState!.save();
+            setState(() {
+              _futureResponse =
+                  _sendAnswer(widget.hostName, widget.formID, _answer);
+            });
+          },
+          tooltip: 'Submit',
+          child: const Icon(Icons.send),
+        ),
       ),
     );
   }
@@ -410,6 +454,7 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   final _formKey = GlobalKey<FormState>();
+  String? _hostName, _formID;
 
   @override
   Widget build(BuildContext context) {
@@ -421,73 +466,82 @@ class _HomeState extends State<Home> {
       body: Center(
         child: SizedBox(
           width: 400,
-          child: Card(
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text('Sign in',
-                        style: Theme.of(context).textTheme.headline4),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: TextFormField(
-                      decoration:
-                          const InputDecoration(hintText: 'Form server'),
-                      onSaved: (value) {
-                        hostName = value;
-                      },
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter a form server name.';
-                        }
-                        return null;
-                      },
-                      autofocus: true,
-                      textInputAction: TextInputAction.next,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Card(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text('Sign in',
+                          style: Theme.of(context).textTheme.headline4),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: TextFormField(
-                      decoration: const InputDecoration(hintText: 'Form ID'),
-                      onSaved: (value) {
-                        formID = value;
-                      },
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter an form ID.';
-                        }
-                        return null;
-                      },
-                      onFieldSubmitted: (value) {
-                        if (_formKey.currentState!.validate()) {
-                          _formKey.currentState!.save();
-                          Navigator.of(context).pushNamed('/answer');
-                        }
-                      },
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        onPrimary: Theme.of(context).colorScheme.onPrimary,
-                        primary: Theme.of(context).colorScheme.primary,
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: TextFormField(
+                        decoration:
+                            const InputDecoration(hintText: 'Form server'),
+                        onSaved: (value) {
+                          _hostName = value;
+                        },
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a form server name.';
+                          }
+                          return null;
+                        },
+                        autofocus: true,
+                        textInputAction: TextInputAction.next,
                       ),
-                      onPressed: () {
-                        if (_formKey.currentState!.validate()) {
-                          _formKey.currentState!.save();
-                          Navigator.of(context).pushNamed('/answer');
-                        }
-                      },
-                      child: const Text('Sign in'),
                     ),
-                  )
-                ],
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: TextFormField(
+                        decoration: const InputDecoration(hintText: 'Form ID'),
+                        onSaved: (value) {
+                          _formID = value;
+                        },
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter an form ID.';
+                          }
+                          return null;
+                        },
+                        onFieldSubmitted: (value) {
+                          if (_formKey.currentState!.validate()) {
+                            _formKey.currentState!.save();
+                            Navigator.of(context).pushNamed(
+                              '/answer',
+                              arguments: FormLocator(_hostName!, _formID!),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          onPrimary: Theme.of(context).colorScheme.onPrimary,
+                          primary: Theme.of(context).colorScheme.primary,
+                        ),
+                        onPressed: () {
+                          if (_formKey.currentState!.validate()) {
+                            _formKey.currentState!.save();
+                            Navigator.of(context).pushNamed(
+                              '/answer',
+                              arguments: FormLocator(_hostName!, _formID!),
+                            );
+                          }
+                        },
+                        child: const Text('Sign in'),
+                      ),
+                    )
+                  ],
+                ),
               ),
             ),
           ),
@@ -514,7 +568,14 @@ class MyFormApp extends StatelessWidget {
       ),
       routes: {
         '/': (context) => const Home(),
-        '/answer': (context) => const AnswerScreen(),
+        '/answer': (context) {
+          final formLocator =
+              ModalRoute.of(context)!.settings.arguments as FormLocator;
+          return AnswerScreen(
+            hostName: formLocator.host,
+            formID: formLocator.id,
+          );
+        },
       },
     );
   }
