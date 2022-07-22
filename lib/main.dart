@@ -130,7 +130,7 @@ class AnswerModel {
 class AnswerResponse {
   final String result;
   final String? id;
-  final String message;
+  final String? message;
 
   const AnswerResponse(this.result, this.id, this.message);
 
@@ -145,8 +145,9 @@ class AnswerResponse {
 
 class FormLocator {
   final String host, id;
+  final AnswerModel? answer;
 
-  const FormLocator(this.host, this.id);
+  const FormLocator(this.host, this.id, [this.answer]);
 }
 
 class CheckboxFormField extends FormField<Map<String, bool>> {
@@ -199,7 +200,6 @@ class _AnswerScreenState extends State<AnswerScreen> {
   final _formKey = GlobalKey<FormState>();
   Future<GetFormModel>? _futureForm;
   late AnswerModel _answer;
-  Future<AnswerResponse>? _futureResponse;
   bool askOnBack = false;
 
   /*
@@ -226,7 +226,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
   );
   */
 
-  Future<GetFormModel> fetchForm(String host, String id) async {
+  Future<GetFormModel> _fetchForm(String host, String id) async {
     final response =
         await http.get(Uri.parse('http://$host:8080/get-form/$id'));
 
@@ -239,29 +239,6 @@ class _AnswerScreenState extends State<AnswerScreen> {
       return form;
     } else {
       throw Exception('Failed to fetch form "$id" from $host.');
-    }
-  }
-
-  Future<AnswerResponse> _sendAnswer(
-    String host,
-    String id,
-    AnswerModel answer,
-  ) async {
-    final response = await http.post(
-      Uri.parse('http://$host:8080/send-answer/$id'),
-      headers: {'Content-Type': 'application/json; charset=UTF-8'},
-      body: jsonEncode(answer),
-    );
-
-    if (response.statusCode == 200) {
-      final ret = AnswerResponse.fromJson(jsonDecode(response.body));
-      if (ret.result != 'ok') {
-        throw Exception('Response is not OK '
-            '(Result: "${ret.result}", Message: "${ret.message}").');
-      }
-      return ret;
-    } else {
-      throw Exception('Failed to send form "$id" to $host.');
     }
   }
 
@@ -348,7 +325,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
   void initState() {
     super.initState();
     _answer = AnswerModel(widget.formID, []);
-    _futureForm = fetchForm(widget.hostName, widget.formID);
+    _futureForm = _fetchForm(widget.hostName, widget.formID);
   }
 
   @override
@@ -414,7 +391,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
                           '''Failed to fetch a form.
 1. Check if you are connected to the internet and the server is online.
 2. Check the server and ID you entered.
-3. Contact a server maintainer with the following message:
+3. Contact the server maintainer with the following message:
 
 ${snapshot.error}''',
                           style: Theme.of(context).textTheme.bodyLarge,
@@ -432,13 +409,160 @@ ${snapshot.error}''',
         floatingActionButton: FloatingActionButton(
           onPressed: () {
             _formKey.currentState!.save();
-            setState(() {
-              _futureResponse =
-                  _sendAnswer(widget.hostName, widget.formID, _answer);
-            });
+            Navigator.of(context).pushNamed(
+              '/answer/submit',
+              arguments: FormLocator(widget.hostName, widget.formID, _answer),
+            );
           },
           tooltip: 'Submit',
           child: const Icon(Icons.send),
+        ),
+      ),
+    );
+  }
+}
+
+class SubmitAnswer extends StatefulWidget {
+  final String hostName, formID;
+  final AnswerModel answer;
+  const SubmitAnswer(
+      {Key? key,
+      required this.hostName,
+      required this.formID,
+      required this.answer})
+      : super(key: key);
+
+  @override
+  State<SubmitAnswer> createState() => _SubmitAnswerState();
+}
+
+class _SubmitAnswerState extends State<SubmitAnswer> {
+  Future<AnswerResponse>? _futureResponse;
+  bool _didSucceed = false;
+
+  Future<AnswerResponse> _submitAnswer(
+    String host,
+    String id,
+    AnswerModel answer,
+  ) async {
+    final response = await http.post(
+      Uri.parse('http://$host:8080/send-answer/$id'),
+      headers: {'Content-Type': 'application/json; charset=UTF-8'},
+      body: jsonEncode(answer),
+    );
+
+    if (response.statusCode == 200) {
+      final ret = AnswerResponse.fromJson(jsonDecode(response.body));
+      if (ret.result != 'ok') {
+        throw Exception('Response is not OK '
+            '(Result: "${ret.result}", Message: "${ret.message}").');
+      }
+      return ret;
+    } else {
+      throw Exception('Failed to submit your answer to $host.');
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _futureResponse =
+        _submitAnswer(widget.hostName, widget.formID, widget.answer);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+      onWillPop: () async {
+        if (_didSucceed) Navigator.popUntil(context, ModalRoute.withName("/"));
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          centerTitle: true,
+          title: const Text('Zemi-A Forms'),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: FutureBuilder<AnswerResponse>(
+              future: _futureResponse,
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  _didSucceed = true;
+                  return SizedBox(
+                    width: 400,
+                    height: 200,
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Column(
+                          children: [
+                            const Expanded(
+                              child: FittedBox(
+                                child: Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  'Saved your answer',
+                                  style:
+                                      Theme.of(context).textTheme.displaySmall,
+                                ),
+                              ),
+                            )
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                } else if (snapshot.hasError) {
+                  return SizedBox(
+                    width: 800,
+                    height: 400,
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: FittedBox(
+                                child: Icon(
+                                  Icons.highlight_off,
+                                  color: Theme.of(context).errorColor,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: Center(
+                                child: Text(
+                                  '''Failed to submit your answer.
+1. Check if you are connected to the internet and the server is online.
+2. Check the server and ID you entered.
+3. Contact the server maintainer with the following message:
+
+${snapshot.error}''',
+                                  style: Theme.of(context).textTheme.bodyLarge,
+                                  textAlign: TextAlign.left,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return const CircularProgressIndicator();
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -515,7 +639,8 @@ class _HomeState extends State<Home> {
                             _formKey.currentState!.save();
                             Navigator.of(context).pushNamed(
                               '/answer',
-                              arguments: FormLocator(_hostName!, _formID!),
+                              arguments:
+                                  FormLocator(_hostName!, _formID!, null),
                             );
                           }
                         },
@@ -576,6 +701,15 @@ class MyFormApp extends StatelessWidget {
             formID: formLocator.id,
           );
         },
+        '/answer/submit': (context) {
+          final formLocator =
+              ModalRoute.of(context)!.settings.arguments as FormLocator;
+          return SubmitAnswer(
+            hostName: formLocator.host,
+            formID: formLocator.id,
+            answer: formLocator.answer!,
+          );
+        }
       },
     );
   }
