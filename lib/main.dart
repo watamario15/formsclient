@@ -325,34 +325,42 @@ class _AnswerScreenState extends State<AnswerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
+    return PopScope<Object?>(
+      // 回答が変更されていなければ、そのまま戻れる。
+      // 変更されていれば、いったん戻る操作を止める。
       canPop: !askOnBack,
-      onPopInvokedWithResult: (didPop, result) async {
+      onPopInvokedWithResult: (bool didPop, Object? result) async {
+        // canPop が true で、すでに正常に戻った場合
         if (didPop) return;
-        final NavigatorState navigator = Navigator.of(context);
-
-        if (await showDialog(
-              context: context,
-              builder: (context) => SimpleDialog(
-                title: const Text('Your answer will be lost. Go back anyway?'),
-                children: [
-                  SimpleDialogOption(
-                    child: const Text('Yes'),
-                    onPressed: () {
-                      Navigator.pop(context, true);
-                    },
-                  ),
-                  SimpleDialogOption(
-                    child: const Text('No'),
-                    onPressed: () {
-                      Navigator.pop(context, false);
-                    },
-                  )
-                ],
+    
+        // canPop が false、つまり回答が変更されている場合
+        final bool shouldPop =
+          await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => SimpleDialog(
+              title: const Text(
+                'Your answer will be lost. Go back anyway?',
               ),
-            ) ??
-            false) {
-          navigator.pop();
+              children: [
+                SimpleDialogOption(
+                  child: const Text('Yes'),
+                  onPressed: () {
+                    Navigator.pop(dialogContext, true);
+                  },
+                ),
+                SimpleDialogOption(
+                  child: const Text('No'),
+                  onPressed: () {
+                    Navigator.pop(dialogContext, false);
+                  },
+                ),
+              ],
+            ),
+          ) ??
+          false;
+    
+        if (shouldPop && context.mounted) {
+          Navigator.of(context).pop(result);
         }
       },
       child: Scaffold(
@@ -371,7 +379,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                     width: 800,
                     child: Form(
                       key: _formKey,
-                      onChanged: () => askOnBack = true,
+                      onChanged: () {
+                        if (!askOnBack) setState(() => askOnBack = true);
+                      },
                       child: ListView(
                         children: [
                           _title(snapshot.data!.form!.title),
@@ -465,16 +475,22 @@ class _SubmitAnswerState extends State<SubmitAnswer> {
   @override
   void initState() {
     super.initState();
-    _futureResponse =
-        _submitAnswer(widget.hostName, widget.formID, widget.answer);
+
+    _futureResponse = _submitAnswer(widget.hostName, widget.formID, widget.answer).then((response) {
+      if (mounted) setState(() => _didSucceed = true);
+      return response;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
+    return PopScope<Object?>(
+      // 送信失敗・送信中なら通常どおり戻れる。
+      // 送信成功後は直接戻らず、コールバックでホームまで戻す。
       canPop: !_didSucceed,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _didSucceed) Navigator.popUntil(context, ModalRoute.withName("/"));
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) return;
+        if (_didSucceed) Navigator.of(context).popUntil(ModalRoute.withName('/'));
       },
       child: Scaffold(
         appBar: AppBar(
@@ -488,7 +504,6 @@ class _SubmitAnswerState extends State<SubmitAnswer> {
               future: _futureResponse,
               builder: (context, snapshot) {
                 if (snapshot.hasData) {
-                  _didSucceed = true;
                   return SizedBox(
                     width: 400,
                     height: 200,
