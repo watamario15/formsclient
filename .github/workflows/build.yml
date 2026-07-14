@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    tags: '*'
+    tags: "*"
   workflow_dispatch:
 
 jobs:
@@ -10,247 +10,239 @@ jobs:
     name: Deploy to GitHub Pages
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: "stable"
           cache: true
-      
-      - name: Flutter Pub Get
-        run: flutter pub get
 
-      - name: Flutter Build
-        run: flutter build web --web-renderer html --base-href /`echo ${{ github.repository }} | sed -e "s#.*/##"`/
+      - name: Build
+        run: |
+          flutter pub get
+          flutter build web --wasm --base-href "/$(echo ${{ github.repository }} | sed -e 's#.*/##')/"
 
-      - uses: peaceiris/actions-gh-pages@v3
+      - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./build/web
-          
+
   create_release:
     name: Create Release
     runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }} # Supplied by actions/create-release
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Generate Release Name
-        id: release_name
-        run: echo ::set-output name=name::${GITHUB_REF/refs\/*s\//}
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.release_name.outputs.name }}
-          release_name: ${{ steps.release_name.outputs.name }}
-          body: |-
-            The purpose of this project is to evaluate the pair-programming. **NOT FOR A PRACTICAL USE.**
-            - The Windows release requires the [64-bit Visual C++ redistributable for Visual Studio 2022](https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads) to be installed.
-            - The Linux release may require some additional dependencies. `ldd` command will teach you what are needed.
-            - For Android devices, download the .apk file and install it with "Allow installation of apps from unknown sources on Android" enabled.
-            - For web, visit the [deployment](https://watamario15.github.io/formsclient/) or the [`gh-pages` branch](https://github.com/watamario15/formsclient/tree/gh-pages).
-            - The macOS and the iOS release are experimental and not notarized. We don't even know whether they work or not.
-          prerelease: true
+        run: |
+          if ! gh release view -R ${{ github.repository }} '${{ github.ref_name }}'; then
+            gh release create -R ${{ github.repository }} '${{ github.ref_name }}' -d -t '${{ github.ref_name }}' -n 'The purpose of this project is to evaluate the pair-programming; **NOT FOR A PRACTICAL USE.**
+
+          - The Windows release requires the latest [Visual C++ redistributable](https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads)
+          - The Linux release may require some additional dependencies; identify them with the `ldd` command
+          - For Android devices, download the `.apk` file and install it with "Allow installation of apps from unknown sources" enabled (the `.aab` release is experimental)
+          - For web, visit the [deployment](https://watamario15.github.io/formsclient/) or the [`gh-pages` branch](https://github.com/watamario15/formsclient/tree/gh-pages)
+          - The macOS and the iOS release are experimental and not notarized (not tested at all)'
+          fi
 
   windows:
-    name: Release Windows Exectable
+    name: Windows Release
     needs: [create_release]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: "stable"
           cache: true
 
-      - name: Flutter Pub Get
-        run: flutter pub get
+      - name: Build
+        run: |
+          flutter pub get
+          flutter build windows
 
-      - name: Flutter Build
-        run: flutter build windows
-      
-      - name: Setup Releases
-        run: compress-archive build/windows/runner/Release/ release.zip
-
-      - name: Generate Archive Name
-        id: archive_name
-        run: echo "::set-output name=name::windows-$($ENV:GITHUB_REF -replace 'refs/.*s/', '')"
-
-      - name: Upload release.zip
-        uses: actions/upload-release-asset@latest
+      - name: Upload
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          compress-archive build/windows/x64/runner/Release/ 'windows-${{ github.ref_name }}.zip'
+          gh release upload -R ${{ github.repository }} '${{ github.ref_name }}' './windows-${{ github.ref_name }}.zip' --clobber
+
+  windows-arm64:
+    name: Windows ARM64 Release
+    needs: [create_release]
+    runs-on: windows-11-vs2026-arm
+    steps:
+      - uses: actions/checkout@v7
         with:
-          upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_path: release.zip
-          asset_name: ${{ steps.archive_name.outputs.name }}.zip
-          asset_content_type: application/zip
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "master"
+          cache: true
+
+      - name: Build
+        run: |
+          flutter pub get
+          flutter build windows
+
+      - name: Upload
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          compress-archive build/windows/arm64/runner/Release/ 'windows-${{ github.ref_name }}-arm64.zip'
+          gh release upload -R ${{ github.repository }} '${{ github.ref_name }}' './windows-${{ github.ref_name }}-arm64.zip' --clobber
 
   macos:
-    name: Release macOS Exectable
+    name: macOS Release
     needs: [create_release]
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: "stable"
           cache: true
 
-      - name: Flutter Pub Get
-        run: flutter pub get
+      - name: Build
+        run: |
+          flutter pub get
+          flutter build macos
 
-      - name: Flutter Build
-        run: flutter build macos
-      
-      - name: Setup Releases
-        run: cd build/macos/Build/Products/Release && 7z a -tzip -y release.zip `echo ${{ github.repository }} | sed -e "s#.*/##"`.app
-
-      - name: Generate Archive Name
-        id: archive_name
-        run: echo ::set-output name=name::macos-${GITHUB_REF/refs\/*s\//}
-
-      - name: Upload .app
-        uses: actions/upload-release-asset@latest
+      - name: Upload
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_path: build/macos/Build/Products/Release/release.zip
-          asset_name: ${{ steps.archive_name.outputs.name }}.app.zip
-          asset_content_type: application/zip
+        run: |
+          cd build/macos/Build/Products/Release
+          7z a -tzip -y 'macos-${{ github.ref_name }}.app.zip' "$(echo ${{ github.repository }} | sed -e 's#.*/##').app"
+          gh release upload -R ${{ github.repository }} '${{ github.ref_name }}' './macos-${{ github.ref_name }}.app.zip' --clobber
 
   linux:
-    name: Release Linux Exectable
+    name: Linux Release
     needs: [create_release]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: "stable"
           cache: true
 
-      - run: |
-          sudo apt update -y
-          sudo apt install -y ninja-build libgtk-3-dev
-          flutter --version
+      - name: Build
+        run: |
+          sudo apt-get install -y ninja-build libgtk-3-dev
+          flutter pub get
+          flutter build linux
 
-      - name: Flutter Pub Get
-        run: flutter pub get
-
-      - name: Flutter Build
-        run: flutter build linux
-      
-      - name: Setup Releases
-        run: cd build/linux/x64/release && tar -zcvf release.tar.gz bundle
-
-      - name: Generate Archive Name
-        id: archive_name
-        run: echo ::set-output name=name::linux-${GITHUB_REF/refs\/*s\//}
-
-      - name: Upload release.tar.gz
-        uses: actions/upload-release-asset@latest
+      - name: Upload
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_path: build/linux/x64/release/release.tar.gz
-          asset_name: ${{ steps.archive_name.outputs.name }}.tar.gz
-          asset_content_type: application/gzip
+        run: |
+          cd build/linux/x64/release
+          tar -zcvf linux-${{ github.ref_name }}.tar.gz bundle
+          gh release upload -R ${{ github.repository }} '${{ github.ref_name }}' './linux-${{ github.ref_name }}.tar.gz' --clobber
 
-  android:
-    name: Release Android Exectable
+  linux-arm64:
+    name: Linux AArch64 Release
     needs: [create_release]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Java
-        uses: actions/setup-java@v3
+      - uses: actions/checkout@v7
         with:
-          distribution: 'microsoft'
-          java-version: '17'
+          persist-credentials: false
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: "master"
           cache: true
 
-      - name: Flutter Pub Get
-        run: flutter pub get
-
-      - name: Flutter Build
+      - name: Build
         run: |
+          sudo apt-get install -y ninja-build libgtk-3-dev
+          flutter pub get
+          flutter build linux
+
+      - name: Upload
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd build/linux/arm64/release
+          tar -zcvf linux-${{ github.ref_name }}-arm64.tar.gz bundle
+          gh release upload -R ${{ github.repository }} '${{ github.ref_name }}' './linux-${{ github.ref_name }}-arm64.tar.gz' --clobber
+
+  android:
+    name: Android Release
+    needs: [create_release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: "microsoft"
+          java-version: "25"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: Build
+        run: |
+          flutter pub get
           flutter build apk
           flutter build appbundle
 
-      - name: Generate Archive Name
-        id: archive_name
-        run: echo ::set-output name=name::android-${GITHUB_REF/refs\/*s\//}
-
-      - name: Upload APK
-        uses: actions/upload-release-asset@latest
+      - name: Upload
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_path: build/app/outputs/apk/release/app-release.apk
-          asset_name: ${{ steps.archive_name.outputs.name }}.apk
-          asset_content_type: application/vnd.android.package-archive
-
-      - name: Upload App Bundle
-        uses: actions/upload-release-asset@latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_path: build/app/outputs/bundle/release/app-release.aab
-          asset_name: ${{ steps.archive_name.outputs.name }}.aab
-          asset_content_type: application/x-authorware-bin
+        run: |
+          mv build/app/outputs/flutter-apk/{app-release,'android-${{ github.ref_name }}'}.apk
+          gh release upload -R ${{ github.repository }} '${{ github.ref_name }}' './build/app/outputs/flutter-apk/android-${{ github.ref_name }}.apk' --clobber
+          mv build/app/outputs/bundle/release/{app-release,'android-${{ github.ref_name }}'}.aab
+          gh release upload -R ${{ github.repository }} '${{ github.ref_name }}' './build/app/outputs/bundle/release/android-${{ github.ref_name }}.aab' --clobber
 
   ios:
-    name: Release iOS Exectable
+    name: iOS/iPadOS Release
     needs: [create_release]
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: "stable"
           cache: true
 
-      - name: Flutter Pub Get
-        run: flutter pub get
-
-      - name: Flutter Build
-        run: flutter build ios --no-codesign
-      
-      - name: Setup Releases
+      - name: Build
         run: |
-          mkdir Payload
-          mv build/ios/iphoneos/Runner.app Payload/
-          7z a -tzip -y release.zip Payload
+          flutter build ios --no-codesign
+          flutter pub get
 
-      - name: Generate Archive Name
-        id: archive_name
-        run: echo ::set-output name=name::ios-${GITHUB_REF/refs\/*s\//}
-
-      - name: Upload .ipa
-        uses: actions/upload-release-asset@latest
+      - name: Upload
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_path: release.zip
-          asset_name: ${{ steps.archive_name.outputs.name }}.ipa
-          asset_content_type: application/octet-stream
+        run: |
+          cd build/ios/iphoneos
+          7z a -tzip -y 'ios-${{ github.ref_name }}.app.zip' Runner.app
+          gh release upload -R ${{ github.repository }} '${{ github.ref_name }}' './ios-${{ github.ref_name }}.app.zip' --clobber

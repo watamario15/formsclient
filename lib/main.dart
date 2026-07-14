@@ -152,18 +152,14 @@ class FormLocator {
 
 class CheckboxFormField extends FormField<Map<String, bool>> {
   CheckboxFormField({
-    Key? key,
-    FormFieldSetter<Map<String, bool>>? onSaved,
-    FormFieldValidator<Map<String, bool>>? validator,
-    AutovalidateMode autovalidateMode = AutovalidateMode.disabled,
+    super.key,
+    super.onSaved,
+    super.validator,
+    AutovalidateMode super.autovalidateMode = AutovalidateMode.disabled,
     Map<String, bool>? initialValue,
     required List<Selection> options,
   }) : super(
-          key: key,
-          onSaved: onSaved,
-          validator: validator,
           initialValue: initialValue ?? {},
-          autovalidateMode: autovalidateMode,
           builder: (state) {
             return Column(
               mainAxisSize: MainAxisSize.min,
@@ -189,8 +185,7 @@ class CheckboxFormField extends FormField<Map<String, bool>> {
 
 class AnswerScreen extends StatefulWidget {
   final String hostName, formID;
-  const AnswerScreen({Key? key, required this.hostName, required this.formID})
-      : super(key: key);
+  const AnswerScreen({super.key, required this.hostName, required this.formID});
 
   @override
   State<AnswerScreen> createState() => _AnswerScreenState();
@@ -256,9 +251,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
-              Row(
+              const Row(
                 mainAxisAlignment: MainAxisAlignment.start,
-                children: const [
+                children: [
                   TextButton(
                     onPressed: null, // 未実装
                     child: Text('Modify this form'),
@@ -330,31 +325,44 @@ class _AnswerScreenState extends State<AnswerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async =>
-          !askOnBack ||
-          (await showDialog(
-                context: context,
-                builder: (context) => SimpleDialog(
-                  title:
-                      const Text('Your answer will be lost. Go back anyway?'),
-                  children: [
-                    SimpleDialogOption(
-                      child: const Text('Yes'),
-                      onPressed: () {
-                        Navigator.pop(context, true);
-                      },
-                    ),
-                    SimpleDialogOption(
-                      child: const Text('No'),
-                      onPressed: () {
-                        Navigator.pop(context, false);
-                      },
-                    )
-                  ],
+    return PopScope<Object?>(
+      // 回答が変更されていなければ、そのまま戻れる。
+      // 変更されていれば、いったん戻る操作を止める。
+      canPop: !askOnBack,
+      onPopInvokedWithResult: (bool didPop, Object? result) async {
+        // canPop が true で、すでに正常に戻った場合
+        if (didPop) return;
+    
+        // canPop が false、つまり回答が変更されている場合
+        final bool shouldPop =
+          await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => SimpleDialog(
+              title: const Text(
+                'Your answer will be lost. Go back anyway?',
+              ),
+              children: [
+                SimpleDialogOption(
+                  child: const Text('Yes'),
+                  onPressed: () {
+                    Navigator.pop(dialogContext, true);
+                  },
                 ),
-              ) ??
-              false),
+                SimpleDialogOption(
+                  child: const Text('No'),
+                  onPressed: () {
+                    Navigator.pop(dialogContext, false);
+                  },
+                ),
+              ],
+            ),
+          ) ??
+          false;
+    
+        if (shouldPop && context.mounted) {
+          Navigator.of(context).pop(result);
+        }
+      },
       child: Scaffold(
         appBar: AppBar(
           centerTitle: true,
@@ -371,7 +379,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                     width: 800,
                     child: Form(
                       key: _formKey,
-                      onChanged: () => askOnBack = true,
+                      onChanged: () {
+                        if (!askOnBack) setState(() => askOnBack = true);
+                      },
                       child: ListView(
                         children: [
                           _title(snapshot.data!.form!.title),
@@ -426,11 +436,10 @@ class SubmitAnswer extends StatefulWidget {
   final String hostName, formID;
   final AnswerModel answer;
   const SubmitAnswer(
-      {Key? key,
+      {super.key,
       required this.hostName,
       required this.formID,
-      required this.answer})
-      : super(key: key);
+      required this.answer});
 
   @override
   State<SubmitAnswer> createState() => _SubmitAnswerState();
@@ -466,16 +475,22 @@ class _SubmitAnswerState extends State<SubmitAnswer> {
   @override
   void initState() {
     super.initState();
-    _futureResponse =
-        _submitAnswer(widget.hostName, widget.formID, widget.answer);
+
+    _futureResponse = _submitAnswer(widget.hostName, widget.formID, widget.answer).then((response) {
+      if (mounted) setState(() => _didSucceed = true);
+      return response;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        if (_didSucceed) Navigator.popUntil(context, ModalRoute.withName("/"));
-        return true;
+    return PopScope<Object?>(
+      // 送信失敗・送信中なら通常どおり戻れる。
+      // 送信成功後は直接戻らず、コールバックでホームまで戻す。
+      canPop: !_didSucceed,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) return;
+        if (_didSucceed) Navigator.of(context).popUntil(ModalRoute.withName('/'));
       },
       child: Scaffold(
         appBar: AppBar(
@@ -489,7 +504,6 @@ class _SubmitAnswerState extends State<SubmitAnswer> {
               future: _futureResponse,
               builder: (context, snapshot) {
                 if (snapshot.hasData) {
-                  _didSucceed = true;
                   return SizedBox(
                     width: 400,
                     height: 200,
@@ -534,7 +548,7 @@ class _SubmitAnswerState extends State<SubmitAnswer> {
                               child: FittedBox(
                                 child: Icon(
                                   Icons.highlight_off,
-                                  color: Theme.of(context).errorColor,
+                                  color: Theme.of(context).colorScheme.error,
                                 ),
                               ),
                             ),
@@ -570,7 +584,7 @@ ${snapshot.error}''',
 }
 
 class Home extends StatefulWidget {
-  const Home({Key? key}) : super(key: key);
+  const Home({super.key});
 
   @override
   State<Home> createState() => _HomeState();
@@ -601,7 +615,7 @@ class _HomeState extends State<Home> {
                     Padding(
                       padding: const EdgeInsets.all(8.0),
                       child: Text('Sign in',
-                          style: Theme.of(context).textTheme.headline4),
+                          style: Theme.of(context).textTheme.headlineMedium),
                     ),
                     Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -630,7 +644,7 @@ class _HomeState extends State<Home> {
                         },
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Please enter an form ID.';
+                            return 'Please enter a form ID.';
                           }
                           return null;
                         },
@@ -650,8 +664,10 @@ class _HomeState extends State<Home> {
                       padding: const EdgeInsets.all(8.0),
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          onPrimary: Theme.of(context).colorScheme.onPrimary,
-                          primary: Theme.of(context).colorScheme.primary,
+                          foregroundColor:
+                              Theme.of(context).colorScheme.onPrimary,
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
                         ),
                         onPressed: () {
                           if (_formKey.currentState!.validate()) {
@@ -677,7 +693,7 @@ class _HomeState extends State<Home> {
 }
 
 class MyFormApp extends StatelessWidget {
-  const MyFormApp({Key? key}) : super(key: key);
+  const MyFormApp({super.key});
 
   @override
   Widget build(BuildContext context) {
